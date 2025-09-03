@@ -1,6 +1,14 @@
 CFLAGS=-O -Wall
 HG_INC=-I./inc -I./htslib
 HG_DEFS=-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_GNU_SOURCE -DMACHTYPE_$(MACHTYPE)
+# Allow Homebrew prefixes on macOS, fallback to system /usr on Linux
+OPENSSL_PREFIX ?= $(shell brew --prefix openssl@3 2>/dev/null || echo /usr)
+ZLIB_PREFIX    ?= $(shell brew --prefix zlib 2>/dev/null || echo /usr)
+
+CFLAGS  += -I$(OPENSSL_PREFIX)/include -I$(ZLIB_PREFIX)/include
+LDFLAGS += -L$(OPENSSL_PREFIX)/lib -L$(ZLIB_PREFIX)/lib
+LIBS    ?= -lssl -lcrypto -lz -lpthread -lm
+
 
 O1 = aliType.o apacheLog.o asParse.o axt.o axtAffine.o \
     base64.o bits.o binRange.o \
@@ -34,9 +42,13 @@ O2 = bandExt.o crudeali.o ffAliHelp.o ffSeedExtend.o fuzzyFind.o \
     genoFind.o gfBlatLib.o gfClientLib.o gfInternal.o gfOut.o gfPcrLib.o gfWebLib.o ooc.o \
     patSpace.o supStitch.o trans3.o
 
+BIN = pblat_bin
+
 all: blat.o jkOwnLib.a jkweb.a htslib/libhts.a
-	$(CC) $(CFLAGS)  -o pblat blat.o jkOwnLib.a jkweb.a htslib/libhts.a  -lm -lpthread -lz -lssl -lcrypto
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $(BIN) blat.o jkOwnLib.a jkweb.a htslib/libhts.a $(LIBS)
 	rm -f *.o *.a
+
+
 
 jkweb.a: $(O1)
 	ar rcus jkweb.a $(O1)
@@ -57,5 +69,7 @@ htslib/libhts.a:
 	cd htslib && make
 
 clean:
-	rm -f *.o *.a pblat
+	@if [ -f pblat ]; then rm -f pblat; fi
+	rm -f *.o *.a
+
 
