@@ -1,28 +1,31 @@
-# Base compiler flags
-CFLAGS=-O2 -Wall -fno-strict-aliasing -falign-functions=32 -falign-loops=32
-HG_INC=-I./inc -I./htslib
-HG_DEFS=-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_GNU_SOURCE -D_POSIX_C_SOURCE=200809L -DMACHTYPE_$(MACHTYPE)
-
-# Allow Homebrew prefixes on macOS, fallback to system /usr on Linux
-OPENSSL_PREFIX ?= $(shell brew --prefix openssl@3 2>/dev/null || echo /usr)
-ZLIB_PREFIX    ?= $(shell brew --prefix zlib 2>/dev/null || echo /usr)
-
-CFLAGS  += -I$(OPENSSL_PREFIX)/include -I$(ZLIB_PREFIX)/include
-LDFLAGS += -L$(OPENSSL_PREFIX)/lib -L$(ZLIB_PREFIX)/lib
-LIBS    ?= -lssl -lcrypto -lz -lpthread -lm
-
-# Detect OS type and apply macOS-specific fixes
+# Detect system type
 UNAME_S := $(shell uname -s)
+UNAME_M := $(shell uname -m)
 
+# Base flags
+CFLAGS_BASE = -O -Wall
+HG_DEFS = -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_GNU_SOURCE -DMACHTYPE_$(UNAME_M)
+
+# macOS vs Linux settings
 ifeq ($(UNAME_S),Darwin)
-    # macOS: clang does not define uint, so force it
-    CFLAGS += -include stdint.h -Duint="unsigned int"
-endif
+    # Architecture flag (Intel or ARM)
+    CFLAGS = $(CFLAGS_BASE) -arch $(UNAME_M)
 
-ifeq ($(UNAME_S),Linux)
-    # Linux: usually already has uint typedef via <sys/types.h>, no extra flags
+    # Homebrew paths (in case system headers/libs aren’t enough)
+    BREW_PREFIX := $(shell brew --prefix 2>/dev/null)
+    ifneq ($(BREW_PREFIX),)
+        HG_INC = -I./inc -I./htslib -I$(BREW_PREFIX)/include
+        HG_LIBS = -L$(BREW_PREFIX)/lib
+    else
+        HG_INC = -I./inc -I./htslib
+        HG_LIBS =
+    endif
+else
+    # Linux
+    CFLAGS = $(CFLAGS_BASE)
+    HG_INC = -I./inc -I./htslib
+    HG_LIBS =
 endif
-
 
 O1 = aliType.o apacheLog.o asParse.o axt.o axtAffine.o \
     base64.o bits.o binRange.o \
@@ -56,10 +59,8 @@ O2 = bandExt.o crudeali.o ffAliHelp.o ffSeedExtend.o fuzzyFind.o \
     genoFind.o gfBlatLib.o gfClientLib.o gfInternal.o gfOut.o gfPcrLib.o gfWebLib.o ooc.o \
     patSpace.o supStitch.o trans3.o
 
-BIN = pblat_bin
-
 all: blat.o jkOwnLib.a jkweb.a htslib/libhts.a
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $(BIN) blat.o jkOwnLib.a jkweb.a htslib/libhts.a $(LIBS)
+	$(CC) $(CFLAGS) -o pblat blat.o jkOwnLib.a jkweb.a htslib/libhts.a $(HG_LIBS) -lm -lpthread -lz -lssl -lcrypto
 	rm -f *.o *.a
 
 jkweb.a: $(O1)
@@ -78,8 +79,7 @@ $(O2): %.o: jkOwnLib/%.c
 	$(CC) $(CFLAGS) $(HG_DEFS) $(HG_INC) -c -o $@ $<
 
 htslib/libhts.a:
-	cd htslib && make
+	cd htslib && make clean && make
 
 clean:
-	@if [ -f pblat_bin ]; then rm -f pblat_bin; fi
-	rm -f *.o *.a
+	rm -f *.o *.a pblat
