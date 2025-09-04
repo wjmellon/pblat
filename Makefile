@@ -8,10 +8,14 @@ HG_DEFS = -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_GNU_SOURCE -DMACHTYPE_$(
 
 # macOS vs Linux settings
 ifeq ($(UNAME_S),Darwin)
-    # Architecture flag (Intel or ARM)
-    CFLAGS = $(CFLAGS_BASE) -arch $(UNAME_M)
+    # Force native arch on macOS
+    ifeq ($(UNAME_M),arm64)
+        CFLAGS = $(CFLAGS_BASE) -arch arm64
+    else
+        CFLAGS = $(CFLAGS_BASE) -arch x86_64
+    endif
 
-    # Homebrew paths (in case system headers/libs aren’t enough)
+    # Homebrew paths (for OpenSSL & zlib)
     BREW_PREFIX := $(shell brew --prefix 2>/dev/null)
     ifneq ($(BREW_PREFIX),)
         HG_INC = -I./inc -I./htslib -I$(BREW_PREFIX)/include
@@ -79,7 +83,7 @@ $(O2): %.o: jkOwnLib/%.c
 	$(CC) $(CFLAGS) $(HG_DEFS) $(HG_INC) -c -o $@ $<
 
 htslib/libhts.a:
-	cd htslib && make clean && make
+	cd htslib && make clean && make CFLAGS="$(CFLAGS)"
 
 clean:
 	rm -f *.o *.a pblat
