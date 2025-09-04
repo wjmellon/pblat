@@ -1,17 +1,29 @@
-# Compiler & Flags
-CFLAGS  = -O2 -Wall -fno-strict-aliasing -falign-functions=32 -falign-loops=32
-HG_INC  = -I./inc -I./htslib
-HG_DEFS = -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_GNU_SOURCE -D_POSIX_C_SOURCE=200809L -DMACHTYPE_$(MACHTYPE)
+# Base compiler flags
+CFLAGS=-O2 -Wall -fno-strict-aliasing -falign-functions=32 -falign-loops=32
+HG_INC=-I./inc -I./htslib
+HG_DEFS=-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_GNU_SOURCE -D_POSIX_C_SOURCE=200809L -DMACHTYPE_$(MACHTYPE)
 
 # Allow Homebrew prefixes on macOS, fallback to system /usr on Linux
 OPENSSL_PREFIX ?= $(shell brew --prefix openssl@3 2>/dev/null || echo /usr)
 ZLIB_PREFIX    ?= $(shell brew --prefix zlib 2>/dev/null || echo /usr)
 
-CPPFLAGS += -I$(OPENSSL_PREFIX)/include -I$(ZLIB_PREFIX)/include
-LDFLAGS  += -L$(OPENSSL_PREFIX)/lib -L$(ZLIB_PREFIX)/lib
-LIBS     ?= -lssl -lcrypto -lz -lpthread -lm
+CFLAGS  += -I$(OPENSSL_PREFIX)/include -I$(ZLIB_PREFIX)/include
+LDFLAGS += -L$(OPENSSL_PREFIX)/lib -L$(ZLIB_PREFIX)/lib
+LIBS    ?= -lssl -lcrypto -lz -lpthread -lm
 
-# Objects
+# Detect OS type and apply macOS-specific fixes
+UNAME_S := $(shell uname -s)
+
+ifeq ($(UNAME_S),Darwin)
+    # macOS: clang does not define uint, so force it
+    CFLAGS += -include stdint.h -Duint="unsigned int"
+endif
+
+ifeq ($(UNAME_S),Linux)
+    # Linux: usually already has uint typedef via <sys/types.h>, no extra flags
+endif
+
+
 O1 = aliType.o apacheLog.o asParse.o axt.o axtAffine.o \
     base64.o bits.o binRange.o \
     blastOut.o blastParse.o boxClump.o boxLump.o bPlusTree.o\
@@ -44,12 +56,11 @@ O2 = bandExt.o crudeali.o ffAliHelp.o ffSeedExtend.o fuzzyFind.o \
     genoFind.o gfBlatLib.o gfClientLib.o gfInternal.o gfOut.o gfPcrLib.o gfWebLib.o ooc.o \
     patSpace.o supStitch.o trans3.o
 
-# Binary target
 BIN = pblat_bin
 
 all: blat.o jkOwnLib.a jkweb.a htslib/libhts.a
-	$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o $(BIN) blat.o jkOwnLib.a jkweb.a htslib/libhts.a $(LIBS)
-	@echo "Build complete: $(BIN)"
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $(BIN) blat.o jkOwnLib.a jkweb.a htslib/libhts.a $(LIBS)
+	rm -f *.o *.a
 
 jkweb.a: $(O1)
 	ar rcus jkweb.a $(O1)
@@ -58,17 +69,17 @@ jkOwnLib.a: $(O2)
 	ar rcus jkOwnLib.a $(O2)
 
 blat.o: blatSrc/blat.c
-	$(CC) $(CFLAGS) $(HG_DEFS) $(HG_INC) $(CPPFLAGS) -c -o blat.o blatSrc/blat.c
+	$(CC) $(CFLAGS) $(HG_DEFS) $(HG_INC) -c -o blat.o blatSrc/blat.c
 
 $(O1): %.o: lib/%.c
-	$(CC) $(CFLAGS) $(HG_DEFS) $(HG_INC) $(CPPFLAGS) -c -o $@ $<
+	$(CC) $(CFLAGS) $(HG_DEFS) $(HG_INC) -c -o $@ $<
 
 $(O2): %.o: jkOwnLib/%.c
-	$(CC) $(CFLAGS) $(HG_DEFS) $(HG_INC) $(CPPFLAGS) -c -o $@ $<
+	$(CC) $(CFLAGS) $(HG_DEFS) $(HG_INC) -c -o $@ $<
 
 htslib/libhts.a:
 	cd htslib && make
 
 clean:
-	@rm -f *.o *.a $(BIN)
-	@echo "Cleaned build artifacts"
+	@if [ -f pblat_bin ]; then rm -f pblat_bin; fi
+	rm -f *.o *.a
