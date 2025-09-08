@@ -1,6 +1,41 @@
+<<<<<<< HEAD
 # Detect OS and architecture
 OS   := $(shell uname -s)
 ARCH ?= $(shell uname -m)
+=======
+# Detect system type
+UNAME_S := $(shell uname -s)
+UNAME_M := $(shell uname -m)
+
+# Base flags
+CFLAGS_BASE = -O -Wall
+HG_DEFS = -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_GNU_SOURCE -DMACHTYPE_$(UNAME_M)
+
+# macOS vs Linux settings
+ifeq ($(UNAME_S),Darwin)
+    # Force native arch on macOS
+    ifeq ($(UNAME_M),arm64)
+        CFLAGS = $(CFLAGS_BASE) -arch arm64
+    else
+        CFLAGS = $(CFLAGS_BASE) -arch x86_64
+    endif
+
+    # Homebrew paths (for OpenSSL & zlib)
+    BREW_PREFIX := $(shell brew --prefix 2>/dev/null)
+    ifneq ($(BREW_PREFIX),)
+        HG_INC = -I./inc -I./htslib -I$(BREW_PREFIX)/include
+        HG_LIBS = -L$(BREW_PREFIX)/lib
+    else
+        HG_INC = -I./inc -I./htslib
+        HG_LIBS =
+    endif
+else
+    # Linux
+    CFLAGS = $(CFLAGS_BASE)
+    HG_INC = -I./inc -I./htslib
+    HG_LIBS =
+endif
+>>>>>>> 76f8b199e6b75d104232195edd92ef277d183543
 
 # Compiler and flags
 CC     ?= clang
@@ -53,7 +88,11 @@ O2 = bandExt.o crudeali.o ffAliHelp.o ffSeedExtend.o fuzzyFind.o \
 
 # Build rules
 all: blat.o jkOwnLib.a jkweb.a htslib/libhts.a
+<<<<<<< HEAD
 	$(CC) $(CFLAGS) -o pblat blat.o jkOwnLib.a jkweb.a htslib/libhts.a $(LDFLAGS) -lm -lpthread -lz -lssl -lcrypto
+=======
+	$(CC) $(CFLAGS) -o pblat blat.o jkOwnLib.a jkweb.a htslib/libhts.a $(HG_LIBS) -lm -lpthread -lz -lssl -lcrypto
+>>>>>>> 76f8b199e6b75d104232195edd92ef277d183543
 	rm -f *.o *.a
 
 jkweb.a: $(O1)
@@ -72,7 +111,7 @@ $(O2): %.o: jkOwnLib/%.c
 	$(CC) $(CFLAGS) $(HG_DEFS) $(HG_INC) -c -o $@ $<
 
 htslib/libhts.a:
-	cd htslib && make
+	cd htslib && make clean && make CFLAGS="$(CFLAGS)"
 
 clean:
 	rm -f *.o *.a pblat
