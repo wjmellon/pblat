@@ -2,10 +2,11 @@
 OS   := $(shell uname -s)
 ARCH ?= $(shell uname -m)
 
-# Compiler and flags
-CC     ?= clang
-CFLAGS = -O -Wall -I./inc -I./htslib
-HG_DEFS = -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_GNU_SOURCE -DMACHTYPE_$(ARCH)
+# Compiler and base flags
+CC      ?= gcc
+CFLAGS  ?= -O -Wall -I./inc -I./htslib
+LDFLAGS ?=
+HG_DEFS  = -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_GNU_SOURCE -DMACHTYPE_$(ARCH)
 
 # macOS: prefer Homebrew OpenSSL depending on architecture
 ifeq ($(OS),Darwin)
@@ -17,6 +18,9 @@ ifeq ($(OS),Darwin)
   CFLAGS  += -I$(OPENSSL_PREFIX)/include
   LDFLAGS += -L$(OPENSSL_PREFIX)/lib
 endif
+
+# Linux: rely on system libs (libssl-dev, zlib1g-dev)
+# OPENSSL_INC and OPENSSL_LIB remain empty
 
 # Objects
 O1 = aliType.o apacheLog.o asParse.o axt.o axtAffine.o \
@@ -53,7 +57,8 @@ O2 = bandExt.o crudeali.o ffAliHelp.o ffSeedExtend.o fuzzyFind.o \
 
 # Build rules
 all: blat.o jkOwnLib.a jkweb.a htslib/libhts.a
-	$(CC) $(CFLAGS) -o pblat blat.o jkOwnLib.a jkweb.a htslib/libhts.a $(LDFLAGS) -lm -lpthread -lz -lssl -lcrypto
+	$(CC) $(CFLAGS) -o pblat blat.o jkOwnLib.a jkweb.a htslib/libhts.a \
+	    $(LDFLAGS) -lm -lpthread -lz -lssl -lcrypto
 	rm -f *.o *.a
 
 jkweb.a: $(O1)
@@ -63,16 +68,16 @@ jkOwnLib.a: $(O2)
 	ar rcus jkOwnLib.a $(O2)
 
 blat.o: blatSrc/blat.c
-	$(CC) $(CFLAGS) $(HG_DEFS) $(HG_INC) -c -o blat.o blatSrc/blat.c
+	$(CC) $(CFLAGS) $(HG_DEFS) -c -o blat.o blatSrc/blat.c
 
 $(O1): %.o: lib/%.c
-	$(CC) $(CFLAGS) $(HG_DEFS) $(HG_INC) -c -o $@ $<
+	$(CC) $(CFLAGS) $(HG_DEFS) -c -o $@ $<
 
 $(O2): %.o: jkOwnLib/%.c
-	$(CC) $(CFLAGS) $(HG_DEFS) $(HG_INC) -c -o $@ $<
+	$(CC) $(CFLAGS) $(HG_DEFS) -c -o $@ $<
 
 htslib/libhts.a:
-	cd htslib && make
+	cd htslib && make clean && make CFLAGS="$(CFLAGS)"
 
 clean:
 	rm -f *.o *.a pblat
